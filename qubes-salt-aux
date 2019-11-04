@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+
+import json
+import shutil
+import sys
+import re
+from argparse import ArgumentParser
+from os import getuid
+from pathlib import Path
+from subprocess import PIPE, STDOUT, CalledProcessError, Popen
+
+AUX_LOG_DIR = Path('/var/log/qubes')
+AUX_SALT_DIR = Path('/srv/salt/aux')
+AUX_SALT_RUNTIME = AUX_SALT_DIR / 'runtime.json'
+
+DEFAULT_SRC = '/home/user/repos/qubes-salt-aux'
+
+
+def error(fmt, *args, **kwargs):
+    msg = fmt.format(*args, **kwargs)
+    sys.stderr.write('ERROR: {}\n'.format(msg))
+    sys.exit(1)
+
+
+def info(fmt, *args, **kwargs):
+    msg = fmt.format(*args, **kwargs)
+    sys.stdout.write('{}\n'.format(msg))
+
+
+def runtime_write(**kwargs):
+    AUX_SALT_RUNTIME.write_text(json.dumps(kwargs))
+
+
+def get_groups():
+    return [p.stem for p in (AUX_SALT_DIR / 'groups').iterdir()]
+
+
+def get_targets(group, skip):
+    targets = []
+    sls = (AUX_SALT_DIR / 'groups' / group).with_suffix('.sls')
+    with sls.open() as f:
+        for line in f.readlines():
+            rx = re.match('[ ]{2}([a-zA-Z0-9][a-zA-Z0-9-]+):$', line)
+            if rx and rx.group(1) not in skip:
+                targets.append(rx.group(1))
+    return targets
+
+
+def log_remove():
+    for path in AUX_LOG_DIR.glob('mgmt-*.log'):
+        path.unlink()
+
+
+def log_parse():
+    result = []
+    for path in AUX_LOG_DIR.glob('mgmt-*.log'):
+        failed = 1
+        succeeded = changed = 0
+        data = path.read_text()
+
+        # XXX: Open ticket.
+        if 'Data failed to compile' not in data:
+            rx = re.search(r'.*: Succeeded:[ \t]+([0-9]+)' +
+                           r'(?: \(changed=([0-9]+)\))?\n' +
+                           r'.*: Failed:[ \t]+([0-9]+)',
+                           data)
+            if rx:
+                succeeded, changed, failed = [int(x or 0) for x in rx.groups()]
+        result.append((path.stem[5:], succeeded, changed, failed))
+    return result
+
+
+def qubesctl(top, targets):
+    cmd = ['qubesctl']
+    if targets:
+        cmd += ['--targets', ','.join(targets)]
+    cmd += ['state.top', top]
+
+    try:
+        p = Popen(cmd, stdout=PIPE, stderr=STDOUT)
+        for line in p.stdout:
+            sys.stdout.write(line.decode())
+        p.wait()
+    except (CalledProcessError, OSError):
+        error('{}: qubesctl failure', ', '.join(targets))
+
+
+def upload(vmname, path):
+    for elt in path.iterdir():
+        if elt.is_dir():
+            upload(vmname, elt)
+        else:
+            info('{}: sending {}', vmname, elt)
+            # This is essentially how qubes-dom0-update does it.
+            cmd = [
+                'qvm-run',
+                '--no-gui',
+                '--quiet',
+                vmname,
+                'mkdir -p {}'.format(elt.parent),
+            ]
+            p = Popen(cmd, stdout=PIPE, stderr=STDOUT)
+            p.wait()
+
+            cmd = [
+                'qvm-run',
+                '--no-gui',
+                '--pass-io',
+                '--quiet',
+                vmname,
+                'cat >{}'.format(elt),
+            ]
+            p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=STDOUT)
+            p.communicate(elt.read_bytes())
+
+
+def cmd_none(args, ap):
+    ap.print_usage(file=sys.stderr)
+    sys.exit(1)
+
+
+def cmd_ls(args, ap):
+    targets = get_targets(args.group, args.skip_targets)
+    for target in targets:
+        print(target)
+
+
+def cmd_run(args, ap):
+    runtime_write(group=args.group, online=args.online)
+    log_remove()
+    targets = get_targets(args.group, args.skip_targets)
+    qubesctl(args.top, targets)
+    fail = 0
+    for target, succeeded, changed, failed in log_parse():
+        info('{}: {} succeeded, {} changed, {} failed',
+             target, succeeded, changed, failed)
+        fail += failed
+
+    if fail:
+        error('{}: salt failure', args.group)
+    return 0
+
+
+def cmd_upload(args, ap):
+    path = args.path.expanduser()
+    if not path.is_dir():
+        error('{} is not a directory', path)
+    upload(args.vmname, path)
+
+
+def parse_args():
+    ap = ArgumentParser()
+    ap.set_defaults(fun=cmd_none)
+    sp = ap.add_subparsers()
+
+    ls = sp.add_parser('ls', help='List targets')
+    ls.add_argument('group', choices=get_groups())
+    ls.add_argument('--skip-targets', '-s', nargs='*', default=[])
+    ls.set_defaults(fun=cmd_ls)
+
+    run = sp.add_parser('run', help='Run a top file')
+    run.add_argument('group', choices=get_groups())
+    run.add_argument('--skip-targets', '-s', nargs='*', default=[])
+    run.add_argument('--top', default='aux.sls')
+    run.add_argument('--online', action='store_true')
+    run.set_defaults(fun=cmd_run)
+
+    upload = sp.add_parser('upload', help='Upload source to VM')
+    upload.add_argument('vmname')
+    upload.add_argument('--path', default=DEFAULT_SRC, type=Path)
+    upload.set_defaults(fun=cmd_upload)
+
+    args = ap.parse_args()
+    args.fun(args, ap)
+
+
+def main():
+    try:
+        parse_args()
+    except PermissionError:
+        sys.stderr.write('This command requires elevated privileges\n')
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

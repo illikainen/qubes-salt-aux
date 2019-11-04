@@ -1,0 +1,5 @@
+XTerm*background: black
+XTerm*foreground: gray
+XTerm*metaSendsEscape: true
+XTerm*scrollBar: false
+XTerm*selectToClipboard: true

@@ -1,0 +1,19 @@
+#!/bin/sh
+#
+# This is the RPC service for the split SSH agent functionality.
+#
+# Based on qubes-app-split-ssh by Jason Hennessey
+
+sock="$XDG_RUNTIME_DIR/gnupg/S.gpg-agent.ssh"
+
+if [ ! -r "$sock" ]; then
+    sock="$SSH_AUTH_SOCK"
+fi
+
+if [ -r "$sock" ]; then
+    notify-send "SSH access from $QREXEC_REMOTE_DOMAIN"
+    socat - "UNIX-CONNECT:${sock}"
+else
+    notify-send "No SSH socket configured"
+    exit 1
+fi

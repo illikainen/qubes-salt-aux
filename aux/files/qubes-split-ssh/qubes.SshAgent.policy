@@ -1,0 +1,4 @@
+# Policy for the split SSH agent.
+$tag:{{ ssh_agent_tag }} $anyvm ask,default_target={{ domain }}
+
+$anyvm $anyvm deny

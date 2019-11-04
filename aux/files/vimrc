@@ -1,0 +1,24 @@
+colorscheme default
+syntax enable
+
+set expandtab
+set tabstop=4
+set softtabstop=4
+set shiftwidth=4
+set smartindent
+set noswapfile
+set nobackup
+
+set hlsearch
+set number
+set mouse=
+
+set modelines=0
+set nomodeline
+
+autocmd BufRead,BufNewFile *.sls,*.top setlocal ft=yaml
+
+autocmd FileType javascript setlocal sts=2 sw=2 ts=2 et
+autocmd FileType json setlocal sts=2 sw=2 ts=2 et
+autocmd FileType make setlocal sts=8 sw=8 ts=8 noet
+autocmd FileType yaml setlocal sts=2 sw=2 ts=2 et
