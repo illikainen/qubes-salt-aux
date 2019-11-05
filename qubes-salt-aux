@@ -32,17 +32,18 @@ def runtime_write(**kwargs):
 
 
 def get_groups():
-    return [p.stem for p in (AUX_SALT_DIR / 'groups').iterdir()]
+    return ['dom0'] + [p.stem for p in (AUX_SALT_DIR / 'groups').iterdir()]
 
 
 def get_targets(group, skip):
     targets = []
     sls = (AUX_SALT_DIR / 'groups' / group).with_suffix('.sls')
-    with sls.open() as f:
-        for line in f.readlines():
-            rx = re.match('[ ]{2}([a-zA-Z0-9][a-zA-Z0-9-]+):$', line)
-            if rx and rx.group(1) not in skip:
-                targets.append(rx.group(1))
+    if sls.exists():
+        with sls.open() as f:
+            for line in f.readlines():
+                rx = re.match('[ ]{2}([a-zA-Z0-9][a-zA-Z0-9-]+):$', line)
+                if rx and rx.group(1) not in skip:
+                    targets.append(rx.group(1))
     return targets
 
 

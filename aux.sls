@@ -1,5 +1,5 @@
 {% import_json 'aux/runtime.json' as rt %}
-{% if rt.group %}
+{% if rt.group and rt.group != 'dom0' %}
   {% import_yaml 'aux/groups/' + rt.group + '.sls' as group with context %}
   {% set dom0 = group and group.get('dom0') or [] %}
   {% set vms = group and group.get('vms') or {} %}
