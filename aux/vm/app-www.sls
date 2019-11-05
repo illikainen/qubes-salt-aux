@@ -2,8 +2,12 @@
 {% set vmname = 'app-www' %}
 {% set template = 'template-debian-10-www' %}
 
-{{ vmname }}-create:
-  qvm.present:
+{{ vmname }}-vm:
+  qvm.vm:
     - name: '{{ vmname }}'
-    - template: '{{ template }}'
-    - label: 'red'
+    - present:
+      - template: '{{ template }}'
+      - label: 'red'
+    - tags:
+      - add:
+        - '{{ globals.tags.allow_clipboard_dst }}'
