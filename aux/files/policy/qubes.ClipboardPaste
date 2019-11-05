@@ -1,0 +1,3 @@
+dom0        $anyvm                          ask
+$anyvm      $tag:{{ clipboard_dst_tag }}    ask
+$anyvm      $anyvm                          deny

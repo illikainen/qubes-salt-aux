@@ -12,6 +12,7 @@ base:
   dom0:
     # Base tasks.
     - aux.tasks.shutdown-updatevm
+    - aux.tasks.setup-qubes-clipboard
     - aux.vm.disp-updates
 
     # Per-group tasks.
